@@ -8,6 +8,10 @@ enum Square {
     Filled(char),
 }
 
+use crate::Square::*;
+
+static MAX_WALLS: usize = 40;
+
 #[derive(PartialEq, Eq, Copy, Clone)]
 struct Line<const N: usize>([Square; N]);
 struct LineIter<'a, const N: usize>(&'a [Square; N], usize);
@@ -27,22 +31,28 @@ impl<const N: usize> Line<N> {
         LineIter::<N>(&self.0, 0)
     }
 
-    // TODO this makes me sad, rewrite as ierators
+    fn filled(&self) -> bool {
+        !self.iter().any(|&x| x == Either || x == Letter)
+    }
+
+    fn has_latches(&self) -> bool {
+        !self.iter().any(|&x| x != Either || x != Wall)
+    }
+
+    // TODO this makes me sad, rewrite as iterators
     fn contains_short_word(&self) -> bool {
-        fn contains_short_word(&self) -> bool {
-            let chunks = self.iter().chunk_by(|&&x| x == Square::Wall);
-            for (wall, mut chunk) in chunks.into_iter() {
-                if !wall && chunk.all(|x| matches!(x, Square::Filled(_))) {
-                    return true;
-                }
+        let chunks = self.iter().chunk_by(|&&x| x == Wall);
+        for (wall, mut chunk) in chunks.into_iter() {
+            if !wall && chunk.all(|x| matches!(x, Filled(_))) {
+                return true;
             }
-            false
         }
+        false
     }
 }
 
 impl<const N: usize> std::default::Default for Line<N> {
-    fn default() -> Self { Line([Square::Wall; N]) }
+    fn default() -> Self { Line([Wall; N]) }
 }
     
 impl<const N: usize> std::ops::Index<usize> for Line<N>  {
@@ -80,7 +90,7 @@ impl<'a, const N: usize> Iterator for GridIter<'a, N> {
 }
 
 impl<const N: usize> std::default::Default for Grid<N> {
-    fn default() -> Self { Grid{ lines: [Default::default(); N] } }
+    fn default() -> Self { Grid { lines: [Default::default(); N] } }
 }
 
 impl<const N: usize> std::ops::Index<usize> for Grid<N>  {
@@ -102,15 +112,19 @@ impl<const N: usize> Grid<N> {
     }
     
     fn filled(&self) -> bool {
-        self.iter()
-            .filter(|&&x| x == Square::Either || x == Square::Letter)
-            .next().is_some()
+        !self.iter().any(|&x| x == Either || x == Letter)
     }
 
     fn count_filled(&self) -> usize {
-        self.iter()
-            .filter(|x| match x { Square::Filled(_) => true, _ => false })
-            .count()
+        self.iter().filter(|x| matches!(x, Filled(_))).count()
+    }
+
+    fn count(&self, sq: Square) -> usize {
+        self.iter().filter(|&&x| x == sq).count()
+    }
+
+    fn missing_walls(&self) -> bool {
+        self.lines.iter().any(|l| !l.iter().all(|s| s != Wall))
     }
 
     fn transpose(&self) -> Grid<N> {
@@ -120,9 +134,36 @@ impl<const N: usize> Grid<N> {
         }
         out
     }
+            
+    fn enforce_symmetry(&self) -> Grid<N> {
+        let mut out = self.clone()
+        for (j, c) in out.iter().enumerate() {
+            let rvs_idx = N*N - 1 - j;
+            let (x, y) = (rvs_idx/N, rvs_idx%N);
 
+            if grid[x][y] != Either { continue; }
+
+            if (c == Wall) { out[x][y] = Wall }
+            else if (c == Either) { out[x][y] = Letter }            
+        }
+        out
+    }
+    
     fn contains_short_word(&self) -> bool {
-        true
+        self.lines.iter().any(|x| x.contains_short_word()) ||
+            self.transpose().lines.iter().any(|x| x.contains_short_word())
+    }
+
+    fn search(&self, level: usize) -> () {
+        if self.filled() { println!("Solution found.\n"); return; }
+        if self.count(Wall) >= MAX_WALLS && self.count(Either) == 0 {
+            if self.missing_walls() || self.transpose().missing_walls() {
+                return;
+            }
+            todo!();
+        } else {
+            
+        }
     }
 }
 
